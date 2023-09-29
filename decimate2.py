@@ -87,11 +87,12 @@ class Decimater(obja.Model):
                 [0,      0,      0,      1]
                 ])
 
-            n = None
-
             try:
                 v = np.linalg.inv(dQ) @ np.array([0, 0, 0, 1]).reshape(-1, 1)
             except np.linalg.LinAlgError:
+                """
+                @TODO Ajouter les autes cas
+                """
                 v = ((self.vertices[a] + self.vertices[b]) / 2).reshape(-1, 1)
                 v = np.vstack((v, [1]))
 
@@ -125,11 +126,13 @@ class Decimater(obja.Model):
         """
         operations = []
 
+
         Qs = self.computeQs()
         validPairs = self.getValidPairs()
         errors, vs = self.getErrors(Qs, validPairs)
         
         validPairs = [x for _,x in sorted(zip(errors, validPairs))]
+        vs = [x for _,x in sorted(zip(errors, ))]
 
         index = 0
         for index, pair in enumerate(validPairs):
