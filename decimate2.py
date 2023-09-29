@@ -5,6 +5,7 @@ import numpy as np
 import sys
 from tqdm import tqdm
 
+
 class Decimater(obja.Model):
     """
     A simple class that decimates a 3D model stupidly.
@@ -45,8 +46,6 @@ class Decimater(obja.Model):
 
         validPairs = set()
 
-        print("faces", self.faces)
-
         for (face_index, face) in tqdm(enumerate(self.faces)):
             f = [face.a, face.b, face.c]
             f.sort()
@@ -70,55 +69,63 @@ class Decimater(obja.Model):
                     validPairs.add((vertex1_index, vertex2_index))
         """
 
-        return validPairs
+        return list(validPairs)
+
+    def getError(self, Qs, pair):
+        a, b = pair
+        Q = Qs[a] + Qs[b]
+
+        dQ = np.array([
+            [Q[0, 0], Q[0, 1], Q[0, 2], Q[0, 3]],
+            [Q[1, 0], Q[1, 1], Q[1, 2], Q[1, 3]],
+            [Q[2, 0], Q[2, 1], Q[2, 2], Q[2, 3]],
+            [0,      0,      0,      1]
+        ])
+
+        try:
+            v = np.linalg.inv(dQ) @ np.array([0, 0, 0, 1]).reshape(-1, 1)
+        except np.linalg.LinAlgError:
+            """
+            @TODO Ajouter les autes cas
+            """
+            v = ((self.vertices[a] + self.vertices[b]) / 2).reshape(-1, 1)
+            v = np.vstack((v, [1]))
+
+        e = (v.T @ Q @ v)[0, 0]
+
+        return v, e
 
     def getErrors(self, Qs, validPairs):
         errors = []
         vs = []
 
         for pair in tqdm(validPairs):
-            a, b = pair
-            Q = Qs[a] + Qs[b]
-
-            dQ = np.array([
-                [Q[0,0], Q[0,1], Q[0,2], Q[0,3]],
-                [Q[1,0], Q[1,1], Q[1,2], Q[1,3]],
-                [Q[2,0], Q[2,1], Q[2,2], Q[2,3]],
-                [0,      0,      0,      1]
-                ])
-
-            try:
-                v = np.linalg.inv(dQ) @ np.array([0, 0, 0, 1]).reshape(-1, 1)
-            except np.linalg.LinAlgError:
-                """
-                @TODO Ajouter les autes cas
-                """
-                v = ((self.vertices[a] + self.vertices[b]) / 2).reshape(-1, 1)
-                v = np.vstack((v, [1]))
+            v, e = self.getError(Qs, pair)
 
             vs.append(v)
-            e = (v.T @ Q @ v)[0,0]
-
             errors.append(e)
         return errors, vs
 
     def getFacesFromVertice(self, v):
         faces = []
 
-        for face_index,face in enumerate(self.faces):
+        for face_index, face in enumerate(self.faces):
             if v in [face.a, face.b, face.c]:
-                faces.append((face_index,face))
-        
+                faces.append((face_index, face))
+
         return face
 
     def getFacesFromVertice(self, v):
         faces = []
 
-        for face_index,face in enumerate(self.faces):
+        for face_index, face in enumerate(self.faces):
             if v in [face.a, face.b, face.c]:
-                faces.append((face_index,face))
-        
+                faces.append((face_index, face))
+
         return faces
+
+    def sorteByError(self, l, errors):
+        return [x for _, x in sorted(zip(errors, l), key=lambda x: x[0])]
 
     def contract(self, output):
         """
@@ -126,59 +133,45 @@ class Decimater(obja.Model):
         """
         operations = []
 
-
-
-        # 1 - Compute the Q matrices for all the initial vertices.
         Qs = self.computeQs()
-        
-        # 2 - Select all valid pairs.
         validPairs = self.getValidPairs()
         errors, vs = self.getErrors(Qs, validPairs)
-        
-        validPairs = [x for _,x in sorted(zip(errors, validPairs))]
-        vs = [x for _,x in sorted(zip(errors, ))]
 
-        # 3 - Compute the optimal contraction target v¯ for each valid pair.
-        index = 0
-        for index, pair in enumerate(validPairs):
-            v1, v2 = pair
-            """print(index, validPairs)
+        validPairs = self.sorteByError(validPairs, errors)
+        vs = self.sorteByError(vs, errors)
 
-            # v1 changé en vs
-            operations.append(("ev", v1, self.vertices[v1]))
-            self.vertices[v1] = vs[index]
+        while len(validPairs) != 0:
+            print(len(validPairs))
+            v1, v2 = validPairs.pop(0)
+            v_bar = vs.pop(0)
+            errors.pop(0)
+            
+            # Editer v1 -> v_bar
+            operations.append(("ev", v1, v_bar[:-1]))
+            self.vertices[v1] = v_bar
+            
+            # Mise à jour de Qs
+            Qs[v1] += Qs[v2]
 
-            self.deleted_vertices.add(v2)
-            operations.append(('vertex', v2, self.vertices[v2]))
+            # Remplacer les v2 en v1 + recalculer l'erreur
+            for index, pair in enumerate(validPairs):
+                if v2 == pair[0]:
+                    validPairs[index] = (v1, pair[1]) if pair[1] > v1 else (pair[1], v1)
+                elif v2 == pair[1]:
+                    validPairs[index] = (v1, pair[0]) if pair[0] > v1 else (pair[0], v1)                    
 
-            facesV2 = self.getFacesFromVertice(v2)
-
-            for face_index, face in facesV2:
-                if face_index not in self.deleted_faces:
-                    if v1 in [face.a, face.b, face.c]:
-                        operations.append(('face', face_index, face))
-                        self.deleted_faces.add(face_index)
-                    else:
-                        operations.append(('ef', face_index, face))
-                        self.faces[face_index] = obja.Face(v1 if face.a == v2 else face.a,v1 if face.a == v2 else face.b, v1 if face.a == v2 else face.c)
-
-            for index,pair in enumerate(validPairs[index+1:], start=index+1):
-                if v2 in pair:
-                    validPairs[index] = (pair[0] if pair[0] != v2 else v1, pair[1] if pair[1] != v2 else v1)
-
-        for v_index, v in enumerate(self.vertices):
-            if v_index not in self.deleted_vertices:
-                operations.append(('vertex', v_index, v))"""
+                # Calcul de l'erreur
+                errors[index] = self.getError(Qs, validPairs[index])
+                
 
         operations.reverse()
 
         output_model = obja.Output(output, random_color=True)
         for (ty, index, value) in operations:
-            print(ty, index, value) 
             if ty == "vertex":
                 output_model.add_vertex(index, value)
             elif ty == "face":
-                output_model.add_face(index, value)  
+                output_model.add_face(index, value)
             elif ty == "ev":
                 output_model.edit_vertex(index, value)
             elif ty == "ef":
@@ -191,9 +184,9 @@ def main():
     """
     np.seterr(invalid='raise')
     model = Decimater()
-    model.parse_file('example/square.obj')
+    model.parse_file('example/suzanne.obj')
 
-    with open('example/square.obja', 'w') as output:
+    with open('example/suzanne.obja', 'w') as output:
         model.contract(output)
 
 
