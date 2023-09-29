@@ -123,12 +123,16 @@ class Decimater(obja.Model):
         """
         operations = []
 
+        # 1 - Compute the Q matrices for all the initial vertices.
         Qs = self.computeQs()
+        
+        # 2 - Select all valid pairs.
         validPairs = self.getValidPairs()
         errors, vs = self.getErrors(Qs, validPairs)
         
         validPairs = [x for _,x in sorted(zip(errors, validPairs))]
 
+        # 3 - Compute the optimal contraction target v¯ for each valid pair.
         index = 0
         for index, pair in enumerate(validPairs):
             v1, v2 = pair
