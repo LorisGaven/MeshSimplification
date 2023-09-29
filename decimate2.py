@@ -5,7 +5,6 @@ import numpy as np
 import sys
 from tqdm import tqdm
 
-
 class Decimater(obja.Model):
     """
     A simple class that decimates a 3D model stupidly.
@@ -46,17 +45,19 @@ class Decimater(obja.Model):
 
         validPairs = set()
 
+        print("faces", self.faces)
+
         for (face_index, face) in tqdm(enumerate(self.faces)):
             f = [face.a, face.b, face.c]
             f.sort()
 
             validPairs.add((f[0], f[1]))
             validPairs.add((f[1], f[2]))
-            validPairs.add((f[2], f[0]))
+            validPairs.add((f[0], f[2]))
 
         t = 0
 
-
+        """
         for (vertex1_index, vertex1) in enumerate(self.vertices):
             for (vertex2_index, vertex2) in enumerate(self.vertices[vertex1_index + 1:], start=vertex1_index + 1):
                 #print(vertex1, vertex2, vertex1_index, vertex2_index)
@@ -67,6 +68,7 @@ class Decimater(obja.Model):
 
                 if euclidean_distance < t:
                     validPairs.add((vertex1_index, vertex2_index))
+        """
 
         return validPairs
 
@@ -136,7 +138,8 @@ class Decimater(obja.Model):
         index = 0
         for index, pair in enumerate(validPairs):
             v1, v2 = pair
-            
+            """print(index, validPairs)
+
             # v1 changé en vs
             operations.append(("ev", v1, self.vertices[v1]))
             self.vertices[v1] = vs[index]
@@ -155,16 +158,19 @@ class Decimater(obja.Model):
                         operations.append(('ef', face_index, face))
                         self.faces[face_index] = obja.Face(v1 if face.a == v2 else face.a,v1 if face.a == v2 else face.b, v1 if face.a == v2 else face.c)
 
+            for index,pair in enumerate(validPairs[index+1:], start=index+1):
+                if v2 in pair:
+                    validPairs[index] = (pair[0] if pair[0] != v2 else v1, pair[1] if pair[1] != v2 else v1)
 
         for v_index, v in enumerate(self.vertices):
             if v_index not in self.deleted_vertices:
-                operations.append(('vertex', v_index, v))      
+                operations.append(('vertex', v_index, v))"""
 
         operations.reverse()
 
         output_model = obja.Output(output, random_color=True)
-
         for (ty, index, value) in operations:
+            print(ty, index, value) 
             if ty == "vertex":
                 output_model.add_vertex(index, value)
             elif ty == "face":
@@ -181,9 +187,9 @@ def main():
     """
     np.seterr(invalid='raise')
     model = Decimater()
-    model.parse_file('example/suzanne.obj')
+    model.parse_file('example/square.obj')
 
-    with open('example/suzanne.obja', 'w') as output:
+    with open('example/square.obja', 'w') as output:
         model.contract(output)
 
 
