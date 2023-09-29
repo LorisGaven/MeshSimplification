@@ -87,11 +87,12 @@ class Decimater(obja.Model):
                 [0,      0,      0,      1]
                 ])
 
-            n = None
-
             try:
                 v = np.linalg.inv(dQ) @ np.array([0, 0, 0, 1]).reshape(-1, 1)
             except np.linalg.LinAlgError:
+                """
+                @TODO Ajouter les autes cas
+                """
                 v = ((self.vertices[a] + self.vertices[b]) / 2).reshape(-1, 1)
                 v = np.vstack((v, [1]))
 
@@ -125,6 +126,8 @@ class Decimater(obja.Model):
         """
         operations = []
 
+
+
         # 1 - Compute the Q matrices for all the initial vertices.
         Qs = self.computeQs()
         
@@ -133,6 +136,7 @@ class Decimater(obja.Model):
         errors, vs = self.getErrors(Qs, validPairs)
         
         validPairs = [x for _,x in sorted(zip(errors, validPairs))]
+        vs = [x for _,x in sorted(zip(errors, ))]
 
         # 3 - Compute the optimal contraction target v¯ for each valid pair.
         index = 0
