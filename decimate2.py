@@ -139,30 +139,77 @@ class Decimater(obja.Model):
 
         validPairs = self.sorteByError(validPairs, errors)
         vs = self.sorteByError(vs, errors)
+        errors = self.sorteByError(errors, errors)
 
+        progress_bar = tqdm(total=len(validPairs), desc="Processing")
         while len(validPairs) != 0:
-            print(len(validPairs))
             v1, v2 = validPairs.pop(0)
             v_bar = vs.pop(0)
             errors.pop(0)
             
             # Editer v1 -> v_bar
-            operations.append(("ev", v1, v_bar[:-1]))
-            self.vertices[v1] = v_bar
+            operations.append(("ev", v1, self.vertices[v1].copy()))
+            self.vertices[v1] = v_bar[:-1].flatten().tolist()
             
             # Mise à jour de Qs
-            Qs[v1] += Qs[v2]
+            Qs[v1] += Qs[v2] 
 
             # Remplacer les v2 en v1 + recalculer l'erreur
             for index, pair in enumerate(validPairs):
-                if v2 == pair[0]:
-                    validPairs[index] = (v1, pair[1]) if pair[1] > v1 else (pair[1], v1)
-                elif v2 == pair[1]:
-                    validPairs[index] = (v1, pair[0]) if pair[0] > v1 else (pair[0], v1)                    
+                if v2 in pair:
+                    if v2 == pair[0]:
+                        validPairs[index] = (v1, pair[1]) if pair[1] > v1 else (pair[1], v1)
+                    elif v2 == pair[1]:
+                        validPairs[index] = (v1, pair[0]) if pair[0] > v1 else (pair[0], v1)                    
 
-                # Calcul de l'erreur
-                errors[index] = self.getError(Qs, validPairs[index])
-                
+                    # Calcul de l'erreur
+                    vs[index], errors[index] = self.getError(Qs, validPairs[index])               
+
+            for index_face, face in enumerate(self.faces):
+                if index_face not in self.deleted_faces:
+                    if v1 in [face.a, face.b, face.c] and v2 in [face.a, face.b, face.c]:
+                        # Supprimer les faces avec v1v2
+                        operations.append(('face', index_face, face.clone()))
+                        self.deleted_faces.add(index_face)
+                    elif v2 in [face.a, face.b, face.c]:
+                        # Changer les faces v2ab -> v1ab
+                        operations.append(('ef', index_face, face.clone()))
+                        face.a, face.b, face.c = [v if v != v2 else v1 for v in [face.a, face.b, face.c]]    
+
+            operations.append(('vertex', v2, self.vertices[v2].copy()))
+            self.deleted_vertices.add(v2)
+
+            # Re-tri de validPairs et vs selon errors
+            validPairs = self.sorteByError(validPairs, errors)
+            vs = self.sorteByError(vs, errors)
+            errors = self.sorteByError(errors, errors)
+
+            # Enlever les pairs en doubles
+            validPairs_ = []
+            validPairs_set = set()
+            vs_ = []
+            errors_ = []
+
+            for index, pair in enumerate(validPairs):
+                if pair not in validPairs_set:
+                    validPairs_set.add(pair)
+                    validPairs_.append(pair)
+                    vs_.append(vs[index])
+                    errors_.append(errors[index])
+
+            validPairs = validPairs_
+            vs = vs_
+            errors = errors_
+
+            progress_bar.update(1)
+
+        for vertex_index, v in enumerate(self.vertices):
+            if vertex_index not in self.deleted_vertices:
+                operations.append(('vertex', vertex_index, v))
+
+        for face_index, face in enumerate(self.faces):
+            if face_index not in self.deleted_faces:
+                operations.append(('face', face_index, face))
 
         operations.reverse()
 
@@ -184,9 +231,9 @@ def main():
     """
     np.seterr(invalid='raise')
     model = Decimater()
-    model.parse_file('example/suzanne.obj')
+    model.parse_file('example/bunny.obj')
 
-    with open('example/suzanne.obja', 'w') as output:
+    with open('example/bunny.obja', 'w') as output:
         model.contract(output)
 
 
