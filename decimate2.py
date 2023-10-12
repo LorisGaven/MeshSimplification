@@ -4,8 +4,6 @@ import obja
 import numpy as np
 import sys
 from tqdm import tqdm
-import copy
-
 
 class Decimater(obja.Model):
     """
@@ -21,6 +19,7 @@ class Decimater(obja.Model):
         Qs = [np.zeros([4, 4]) for vertex in self.vertices]
 
         for (face_index, face) in enumerate(self.faces):
+
             x1, y1, z1 = self.vertices[face.a]
             x2, y2, z2 = self.vertices[face.b]
             x3, y3, z3 = self.vertices[face.c]
@@ -55,7 +54,7 @@ class Decimater(obja.Model):
             validPairs.add((f[1], f[2]))
             validPairs.add((f[0], f[2]))
 
-        t = 0.05
+        t = 0
 
         if t > 0:
             for (vertex1_index, vertex1) in tqdm(enumerate(self.vertices), total=len(self.vertices)):
@@ -90,10 +89,7 @@ class Decimater(obja.Model):
             v = ((np.array(self.vertices[a]) + np.array(self.vertices[b])) / 2).reshape(-1, 1)
             v = np.vstack((v, [1]))
 
-        v = ((np.array(self.vertices[a]) + np.array(self.vertices[b])) / 2).reshape(-1, 1)
-        v = np.vstack((v, [1]))
-
-        e = ((v.T @ Q) @ v)[0, 0]
+        e = (v.T @ Q @ v)[0, 0]
 
         return v, e
 
@@ -136,6 +132,8 @@ class Decimater(obja.Model):
         progress_bar = tqdm(total=len(validPairs), desc="Processing")
         while len(validPairs) != 0:
             v1, v2 = validPairs.pop(0)
+            if v1 in self.deleted_vertices or v2 in self.deleted_vertices:
+                print("AHHHHHHHHHH")
             v_bar = vs.pop(0)
             errors.pop(0)
 
@@ -162,7 +160,7 @@ class Decimater(obja.Model):
                         face.a, face.b, face.c = [v if v != v2 else v1 for v in [face.a, face.b, face.c]]
             
             # Mise à jour de Qs
-            Qs[v1] += Qs[v2]
+            Qs[v1] = Qs[v1] + Qs[v2]
 
             operations.append(('vertex', v2, self.vertices[v2].copy()))
             self.deleted_vertices.add(v2)
@@ -222,11 +220,17 @@ def main():
     """
     Runs the program on the model given as parameter.
     """
+
+    if len(sys.argv) != 2:
+        print("Utilisation : python decimate2.py model")
+        exit(0)
+
+    model_name = sys.argv[1]
     np.seterr(invalid='raise')
     model = Decimater()
-    model.parse_file('example/suzanne.obj')
+    model.parse_file(f'example/{model_name}.obj')
 
-    with open('example/suzanne.obja', 'w') as output:
+    with open(f'example/{model_name}.obja', 'w') as output:
         model.contract(output)
 
 
