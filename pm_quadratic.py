@@ -10,8 +10,9 @@ class Decimater(obja.Model):
     A simple class that decimates a 3D model stupidly.
     """
 
-    def __init__(self):
+    def __init__(self, t):
         super().__init__()
+        self.t = t
         self.deleted_faces = set()
         self.deleted_vertices = set()
 
@@ -54,9 +55,7 @@ class Decimater(obja.Model):
             validPairs.add((f[1], f[2]))
             validPairs.add((f[0], f[2]))
 
-        t = 0
-
-        if t > 0:
+        if self.t > 0:
             for (vertex1_index, vertex1) in tqdm(enumerate(self.vertices), total=len(self.vertices)):
                 for (vertex2_index, vertex2) in enumerate(self.vertices[vertex1_index + 1:], start=vertex1_index + 1):
                     #print(vertex1, vertex2, vertex1_index, vertex2_index)
@@ -65,7 +64,7 @@ class Decimater(obja.Model):
 
                     euclidean_distance = np.linalg.norm(v1 - v2)
 
-                    if euclidean_distance < t:
+                    if euclidean_distance < self.t:
                         validPairs.add((vertex1_index, vertex2_index))
 
 
@@ -85,13 +84,33 @@ class Decimater(obja.Model):
         if np.linalg.det(dQ) > 0.001:
             dQinv = np.linalg.inv(dQ)
             v = dQinv @ (np.array([0, 0, 0, 1]).reshape(-1, 1))
+            e = (v.T @ Q @ v)[0, 0]
         else:
-            v = ((np.array(self.vertices[a]) + np.array(self.vertices[b])) / 2).reshape(-1, 1)
-            v = np.vstack((v, [1]))
-
-        e = (v.T @ Q @ v)[0, 0]
+            v, e = self.minimize_error_on_line(Q, a, b)
 
         return v, e
+    
+    def minimize_error_on_line(self, Q, a, b):
+        v1 = np.array(self.vertices[a])
+        v2 = np.array(self.vertices[b])
+        # Calculer la direction de la droite v1 v2
+        direction = v2 - v1
+        direction /= np.linalg.norm(direction)
+
+        # Trouver le point sur la droite qui minimise l'erreur
+        v_min_error = None
+        min_error = float('inf')
+
+        for t in np.linspace(0, 1, 100):
+            v_test = (v1 + t * direction).reshape(-1, 1)
+            v_test = np.vstack((v_test, [1]))
+            e_test = (v_test.T @ Q @ v_test)[0, 0]
+
+            if e_test < min_error:
+                v_min_error = v_test
+                min_error = e_test
+
+        return v_min_error, min_error
 
     def getErrors(self, Qs, validPairs):
         errors = []
@@ -219,13 +238,14 @@ def main():
     Runs the program on the model given as parameter.
     """
 
-    if len(sys.argv) != 2:
-        print("Utilisation : python decimate2.py model")
+    if len(sys.argv) != 2 and len(sys.argv) != 3:
+        print("Utilisation : python decimate2.py model t(optional)")
         exit(0)
 
     model_name = sys.argv[1]
+    t = 0 if len(sys.argv) == 2 else float(sys.argv[2])
     np.seterr(invalid='raise')
-    model = Decimater()
+    model = Decimater(t)
     model.parse_file(f'example/{model_name}.obj')
 
     with open(f'example/{model_name}.obja', 'w') as output:
