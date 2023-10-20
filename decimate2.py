@@ -85,13 +85,33 @@ class Decimater(obja.Model):
         if np.linalg.det(dQ) > 0.001:
             dQinv = np.linalg.inv(dQ)
             v = dQinv @ (np.array([0, 0, 0, 1]).reshape(-1, 1))
+            e = (v.T @ Q @ v)[0, 0]
         else:
-            v = ((np.array(self.vertices[a]) + np.array(self.vertices[b])) / 2).reshape(-1, 1)
-            v = np.vstack((v, [1]))
-
-        e = (v.T @ Q @ v)[0, 0]
+            v, e = self.minimize_error_on_line(Q, a, b)
 
         return v, e
+    
+    def minimize_error_on_line(self, Q, a, b):
+        v1 = np.array(self.vertices[a])
+        v2 = np.array(self.vertices[b])
+        # Calculer la direction de la droite v1 v2
+        direction = v2 - v1
+        direction /= np.linalg.norm(direction)
+
+        # Trouver le point sur la droite qui minimise l'erreur
+        v_min_error = None
+        min_error = float('inf')
+
+        for t in np.linspace(0, 1, 100):
+            v_test = (v1 + t * direction).reshape(-1, 1)
+            v_test = np.vstack((v_test, [1]))
+            e_test = (v_test.T @ Q @ v_test)[0, 0]
+
+            if e_test < min_error:
+                v_min_error = v_test
+                min_error = e_test
+
+        return v_min_error, min_error
 
     def getErrors(self, Qs, validPairs):
         errors = []
