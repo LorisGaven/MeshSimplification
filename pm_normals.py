@@ -4,7 +4,6 @@ import obja
 import numpy as np
 import sys
 from tqdm import tqdm
-import random
 
 class Decimater(obja.Model):
     """
@@ -73,14 +72,35 @@ class Decimater(obja.Model):
             vertex_normals[vertex_index] /= inc
         
         return vertex_normals
+    
+    def updateNormals(self, vertex_normals, vertex_indices):
+        for vertex_index in vertex_indices:
+            inc = 0
+            vertex_normals[vertex_index] = np.zeros(3)
+            for _, face in enumerate(self.faces):
+                if vertex_index in [face.a, face.b, face.c]:
+                    x1, y1, z1 = self.vertices[face.a]
+                    x2, y2, z2 = self.vertices[face.b]
+                    x3, y3, z3 = self.vertices[face.c]
+
+                    AB = np.array([x2 - x1, y2 - y1, z2 - z1])
+                    AC = np.array([x3 - x1, y3 - y1, z3 - z1])
+
+                    N = np.cross(AB, AC)
+                    N = N / np.linalg.norm(N)
                     
+                    vertex_normals[vertex_index] += N
+                    inc += 1
+            vertex_normals[vertex_index] /= inc
+        return vertex_normals
+            
     def contract(self, output):
         """
         Decimates the model stupidly, and write the resulting obja in output.
         """
         operations = []
         operations_face = []
-
+        
         # compute normals
         vertex_normals = self.computeNormals()
         
@@ -88,12 +108,15 @@ class Decimater(obja.Model):
         validPairs = self.getValidPairs()
         progress_bar = tqdm(total=len(validPairs), desc="Processing")
         
+        
         print(validPairs[0])
         while len(validPairs) != 0:
-            #Remove first key of validPairs and assign it to v1 v2
-            #Get list of the keys of validPairs
+            # sort validPairs by normal difference
             validPairsDist = [self.getNormalDifference(vertex_normals[pair[0]], vertex_normals[pair[1]]) for pair in validPairs]
             validPairs = self.sorteByNormalDifference(validPairs, validPairsDist)
+            
+            #Remove first key of validPairs and assign it to v1 v2
+            #Get list of the keys of validPairs
             key = validPairs.pop(0)
             v1 = key[0]
             v2 = key[1]
@@ -106,7 +129,8 @@ class Decimater(obja.Model):
                         validPairs[index] = (v1, pair[1]) if pair[1] > v1 else (pair[1], v1)
                     elif v2 == pair[1]:
                         validPairs[index] = (v1, pair[0]) if pair[0] > v1 else (pair[0], v1)                    
-    
+
+            modified_faces = set()
             
             for index_face, face in enumerate(self.faces):
                 if index_face not in self.deleted_faces:
@@ -114,12 +138,24 @@ class Decimater(obja.Model):
                         # Supprimer les faces avec v1v2
                         operations.append(('face', index_face, face.clone()))
                         self.deleted_faces.add(index_face)
+                        modified_faces.add(index_face)
+
                     elif v2 in [face.a, face.b, face.c]:
                         # Changer les faces v2ab -> v1ab
                         operations.append(('ef', index_face, face.clone()))
                         face.a, face.b, face.c = [v if v != v2 else v1 for v in [face.a, face.b, face.c]]
-            
+                        modified_faces.add(index_face)
 
+            # get vertex from modified faces
+            modified_vertices = set()
+            for index_face in modified_faces:
+                modified_vertices.add(self.faces[index_face].a)
+                modified_vertices.add(self.faces[index_face].b)
+                modified_vertices.add(self.faces[index_face].c)
+    
+            # Update normals of modified vertices
+            vertex_normals = self.updateNormals(vertex_normals, modified_vertices)
+                        
             operations.append(('vertex', v2, self.vertices[v2].copy()))
             self.deleted_vertices.add(v2)
 
@@ -136,7 +172,6 @@ class Decimater(obja.Model):
                     validPairs_set.add((pair[0], pair[1]))
                     validPairs_.append((pair[0], pair[1]))
    
-
             validPairs = validPairs_
 
             progress_bar.update(1)
