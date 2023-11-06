@@ -46,6 +46,7 @@ class Decimater(obja.Model):
         return list(validPairs)
     
     def getNormalDifference(self, n1, n2):
+        return 1 - np.dot(n1,n2)
         return np.linalg.norm(np.array(n1) - np.array(n2))
     
     def sorteByNormalDifference(self, l, normalDifferences):
@@ -70,6 +71,7 @@ class Decimater(obja.Model):
                     vertex_normals[vertex_index] += N
                     inc += 1
             vertex_normals[vertex_index] /= inc
+            vertex_normals[vertex_index] /= np.linalg.norm(vertex_normals[vertex_index])
         
         return vertex_normals
     
@@ -91,7 +93,10 @@ class Decimater(obja.Model):
                     
                     vertex_normals[vertex_index] += N
                     inc += 1
+
             vertex_normals[vertex_index] /= inc
+            vertex_normals[vertex_index] /= np.linalg.norm(vertex_normals[vertex_index])
+            
         return vertex_normals
             
     def contract(self, output):
