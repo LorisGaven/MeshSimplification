@@ -5,17 +5,18 @@ import numpy as np
 import sys
 from tqdm import tqdm
 import random
+import multiprocessing
 
 class Decimater(obja.Model):
     """
     A simple class that decimates a 3D model stupidly.
     """
 
+
     def __init__(self):
         super().__init__()
         self.deleted_faces = set()
         self.deleted_vertices = set()
-
 
     def getValidPairs(self):
 
@@ -28,7 +29,7 @@ class Decimater(obja.Model):
             validPairs.add((f[1], f[2]))
             validPairs.add((f[0], f[2]))
 
-        t = 0.1
+        t = 0.0
 
         if t > 0:
             for (vertex1_index, vertex1) in tqdm(enumerate(self.vertices), total=len(self.vertices)):
@@ -45,7 +46,8 @@ class Decimater(obja.Model):
 
         return list(validPairs)
     
-    def getDistance(self, v1, v2, faces):
+    def getDistance(self, args):
+        v1, v2, faces = args
         c1 = self.getCourbure(v1, faces)
         c2 = self.getCourbure(v2, faces)
         
@@ -110,7 +112,8 @@ class Decimater(obja.Model):
 
         for i, face in enumerate(face_voisine):
             N = self.computeNormalFace(face) - N_v
-            Ns += N @ N.T
+            N = N.reshape((1, -1))
+            Ns += N.T @ N
 
         return Ns
 
@@ -121,6 +124,8 @@ class Decimater(obja.Model):
         """
         operations = []
         operations_face = []
+        
+        pool_obj = multiprocessing.Pool()
 
         print("Calcul validPairs")
         validPairs = self.getValidPairs()
@@ -130,7 +135,8 @@ class Decimater(obja.Model):
             #Remove first key of validPairs and assign it to v1 v2
             #Get list of the keys of validPairs
             faces = self.getFaces()
-            validPairsDist = [self.getDistance(pair[0], pair[1], faces) for pair in validPairs]
+            #validPairsDist = [self.getDistance(pair[0], pair[1], faces) for pair in validPairs]
+            validPairsDist = pool_obj.map(self.getDistance, [(pair[0], pair[1], faces) for pair in validPairs])
             validPairs = self.sorteByDistance(validPairs, validPairsDist)
 
             key = validPairs.pop(0)
