@@ -134,8 +134,11 @@ class Decimater(obja.Model):
             #Get list of the keys of validPairs
 
             validPairs = self.sorteByDistance(validPairs, validPairsDist)
+            validPairsDist = self.sorteByDistance(validPairsDist, validPairsDist)
 
             key = validPairs.pop(0)
+            validPairsDist.pop(0)
+
             v1 = key[0]
             v2 = key[1]
             v_bar = (np.array(self.vertices[v1]) + np.array(self.vertices[v2])) / 2
@@ -147,7 +150,6 @@ class Decimater(obja.Model):
                         validPairs[index] = (v1, pair[1]) if pair[1] > v1 else (pair[1], v1)
                     elif v2 == pair[1]:
                         validPairs[index] = (v1, pair[0]) if pair[0] > v1 else (pair[0], v1)                    
-    
             
             for index_face, face in enumerate(self.faces):
                 if index_face not in self.deleted_faces:
@@ -181,9 +183,16 @@ class Decimater(obja.Model):
             validPairs = validPairs_
 
             faces = self.getFaces()
-            # A modifier pour que ça marche car ça marche pas
 
-            validPairsDist = [self.getDistance(pair[0], pair[1], faces) if v1 in pair or v2 in pair else validPairsDist[i] for (i, pair) in enumerate(validPairs)]
+            condition = [0 for i in self.vertices]
+
+            for face in faces[v1]:
+                if face not in self.deleted_faces:
+                    condition[face.a] = 1
+                    condition[face.b] = 1
+                    condition[face.c] = 1
+
+            validPairsDist = [self.getDistance(pair[0], pair[1], faces) if condition[pair[0]] or condition[pair[1]] else validPairsDist[i] for (i, pair) in enumerate(validPairs)]
 
             progress_bar.update(1)
             progress_bar.total = len(validPairs)
