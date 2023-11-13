@@ -5,18 +5,17 @@ import numpy as np
 import sys
 from tqdm import tqdm
 import random
-import multiprocessing
 
 class Decimater(obja.Model):
     """
     A simple class that decimates a 3D model stupidly.
     """
 
-
     def __init__(self):
         super().__init__()
         self.deleted_faces = set()
         self.deleted_vertices = set()
+
 
     def getValidPairs(self):
 
@@ -46,8 +45,7 @@ class Decimater(obja.Model):
 
         return list(validPairs)
     
-    def getDistance(self, args):
-        v1, v2, faces = args
+    def getDistance(self, v1, v2, faces):
         c1 = self.getCourbure(v1, faces)
         c2 = self.getCourbure(v2, faces)
         
@@ -112,8 +110,7 @@ class Decimater(obja.Model):
 
         for i, face in enumerate(face_voisine):
             N = self.computeNormalFace(face) - N_v
-            N = N.reshape((1, -1))
-            Ns += N.T @ N
+            Ns += N @ N.T
 
         return Ns
 
@@ -124,22 +121,24 @@ class Decimater(obja.Model):
         """
         operations = []
         operations_face = []
-        
-        pool_obj = multiprocessing.Pool()
 
         print("Calcul validPairs")
         validPairs = self.getValidPairs()
         progress_bar = tqdm(total=len(validPairs), desc="Processing")
+
+        faces = self.getFaces()
+        validPairsDist = [self.getDistance(pair[0], pair[1], faces) for pair in validPairs]
         
         while len(validPairs) != 0:
             #Remove first key of validPairs and assign it to v1 v2
             #Get list of the keys of validPairs
-            faces = self.getFaces()
-            #validPairsDist = [self.getDistance(pair[0], pair[1], faces) for pair in validPairs]
-            validPairsDist = pool_obj.map(self.getDistance, [(pair[0], pair[1], faces) for pair in validPairs])
+
             validPairs = self.sorteByDistance(validPairs, validPairsDist)
+            validPairsDist = self.sorteByDistance(validPairsDist, validPairsDist)
 
             key = validPairs.pop(0)
+            validPairsDist.pop(0)
+
             v1 = key[0]
             v2 = key[1]
             v_bar = (np.array(self.vertices[v1]) + np.array(self.vertices[v2])) / 2
@@ -151,7 +150,6 @@ class Decimater(obja.Model):
                         validPairs[index] = (v1, pair[1]) if pair[1] > v1 else (pair[1], v1)
                     elif v2 == pair[1]:
                         validPairs[index] = (v1, pair[0]) if pair[0] > v1 else (pair[0], v1)                    
-    
             
             for index_face, face in enumerate(self.faces):
                 if index_face not in self.deleted_faces:
@@ -183,6 +181,18 @@ class Decimater(obja.Model):
    
 
             validPairs = validPairs_
+
+            faces = self.getFaces()
+
+            condition = [0 for i in self.vertices]
+
+            for face in faces[v1]:
+                if face not in self.deleted_faces:
+                    condition[face.a] = 1
+                    condition[face.b] = 1
+                    condition[face.c] = 1
+
+            validPairsDist = [self.getDistance(pair[0], pair[1], faces) if condition[pair[0]] or condition[pair[1]] else validPairsDist[i] for (i, pair) in enumerate(validPairs)]
 
             progress_bar.update(1)
             progress_bar.total = len(validPairs)
