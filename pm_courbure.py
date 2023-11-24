@@ -78,7 +78,7 @@ class Decimater(obja.Model):
 
         norm = np.linalg.norm(N)
         
-        return N
+        return N/norm
 
     def computeNormalVertice(self, vertice, faces):
         N = np.zeros(3)
@@ -110,9 +110,10 @@ class Decimater(obja.Model):
 
         for i, face in enumerate(face_voisine):
             N = self.computeNormalFace(face) - N_v
-            Ns += N @ N.T
+            N = N.reshape(1, -1)
+            Ns += N.T @ N
 
-        return Ns
+        return Ns/np.linalg.norm(Ns)
 
 
     def contract(self, output):
